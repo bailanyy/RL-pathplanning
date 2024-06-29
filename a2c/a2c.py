@@ -57,7 +57,7 @@ class Actor(nn.Module):
                 )
 
         self.l1 = nn.Linear(128,64)
-        self.l2 = nn.Linear(64,9)
+        self.l2 = nn.Linear(64,5)
 
 
     def forward(self, x):
@@ -127,7 +127,7 @@ class Actor_Critic:
         self.lr_c = 1e-3
 
 
-        self.action_dim = 9         #获取描述行动的数据维度
+        self.action_dim = 5       #获取描述行动的数据维度
         #self.state_dim = self.env.observation_space.shape[0]  #获取描述环境的数据维度
 
         self.actor = Actor().cuda()   #创建演员网络

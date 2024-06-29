@@ -43,26 +43,15 @@ class Env:
                 self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] - 1
                 self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] + 0
             if action == 2:
-                self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] - 1
-                self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1]- 1
+                self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] + 0
+                self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] - 1
             if action == 3:
-                self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] - 0
-                self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] - 1
+                self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] + 1
+                self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] - 0
             if action == 4:
-                self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] + 1
-                self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] - 1
-            if action == 5:
-                self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] + 1
-                self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] + 0
-            if action == 6:
-                self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] + 1
-                self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] + 1
-            if action == 7:
                 self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] + 0
                 self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] + 1
-            if action == 8:
-                self.agent_list[i].position[0][0] = self.agent_list[i].position[0][0] - 1
-                self.agent_list[i].position[0][1] = self.agent_list[i].position[0][1] + 1
+          
             
             if self.agent_list[i].position[0][0] < 0 or self.agent_list[i].position[0][0] > 39 or self.agent_list[i].position[0][1] <0 or self.agent_list[i].position[0][1]>39:
                 self.agent_list[i].out_bounded_flag  = True  # 越界
@@ -101,26 +90,15 @@ class Env:
             agent.position[0][0] =agent.position[0][0] + 1
             agent.position[0][1] = agent.position[0][1] + 0
         if action == 2:
-            agent.position[0][0] = agent.position[0][0] + 1
+            agent.position[0][0] = agent.position[0][0] + 0
             agent.position[0][1] = agent.position[0][1]+ 1
         if action == 3:
-            agent.position[0][0] = agent.position[0][0] + 0
-            agent.position[0][1] = agent.position[0][1] + 1
-        if action == 4:
-            agent.position[0][0] = agent.position[0][0] - 1
-            agent.position[0][1] = agent.position[0][1] + 1
-        if action == 5:
             agent.position[0][0] = agent.position[0][0] - 1
             agent.position[0][1] = agent.position[0][1] + 0
-        if action == 6:
-            agent.position[0][0] = agent.position[0][0] - 1
+        if action == 4:
+            agent.position[0][0] = agent.position[0][0] - 0
             agent.position[0][1] = agent.position[0][1] - 1
-        if action == 7:
-            agent.position[0][0] = agent.position[0][0] + 0
-            agent.position[0][1] = agent.position[0][1] - 1
-        if action == 8:
-            agent.position[0][0] = agent.position[0][0] + 1
-            agent.position[0][1] = agent.position[0][1] - 1
+
 
 
 class Agent:
@@ -144,6 +122,7 @@ class Agent:
         self.out_bounded_flag = False
         self.reached = False 
         self.global_count = 0
+
        
     def obversation(self,grid_map): # 越界表示为障碍物
         # map size is 40*40
@@ -178,31 +157,35 @@ class Agent:
         self.goal[0][0] = goal[0][0]
         self.goal[0][1] = goal[0][1]
     def get_reward(self,guide):
-        r1 = 0.1 * -1
+        r1 = 0.01 * -1
         reward = 0
         goal_rew = 50
         if self.collision_flag == True or self.out_bounded_flag == True:
             r2 = -0.1
             r3 =0
+          
         else :
             r2 = 0
             if guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] == 1:
                 r3 = 0.1
-                self.global_count = self.global_count + 1
-                reward = reward + 0.1 * self.global_count
-                #guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] =0
+                
+                
+                
+
+                reward = reward + 0.1 * guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] * self.global_count
+                self.global_count = 0
+                guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] = 0
             else:
-                r3 = 0
+                self.global_count += 1   
             if self.position[0][0] == self.goal[0][0] and self.position[0][1] == self.goal[0][1]:
                 reward = reward + goal_rew
                 print('success',reward)
                 self.reached = True
-            if self.action == 0:
-                reward = reward - 0.5
-            # 代理需要一定的方向指引
-        distance = math.sqrt(pow(self.position[0][0]-self.goal[0][0],2) + pow(self.position[0][0]-self.goal[0][0],2))
-        rd = (self.dis - distance)*0.01
-        reward = reward + r1+  r2 + rd
+            # if self.action == 0:
+            #     reward = reward - 0.5
+
+      
+        reward = reward + r1+  r2 
         self.collision_flag = False
         self.out_bounded_flag = False
         return reward

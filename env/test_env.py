@@ -1,8 +1,8 @@
 '''
 Author: yy.yy 729853861@qq.com
 Date: 2024-06-24 16:18:19
-LastEditors: yy.yy 729853861@qq.com
-LastEditTime: 2024-06-28 11:05:13
+LastEditors: yygod-sgdie 729853861@qq.com
+LastEditTime: 2024-06-28 21:38:51
 FilePath: \dqnc:\workspace\dissertation_project\env\test_env.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -50,7 +50,7 @@ def main():
         env.generate_global_guidence(resultx,resulty)
         env.agent_list[0].obversation(maze)
         max_step = 0
-
+        
         s = env.agent_list[0].transVOF2tensor()
         ep_r = 0
         
@@ -78,6 +78,7 @@ def main():
             reward,state,done = env.update() # 更新下一步的地图,返回一个reward
             rew = reward[0]
             s_ = state[0]
+            ep_r = ep_r + rew
             if max_step > 256:
                 done = True
             if done == True:
@@ -86,7 +87,7 @@ def main():
                     print(rew)
                 break
             model.learn(log_prob,s,s_,rew)
-            ep_r = ep_r + rew
+            
             max_step = max_step + 1
             s = s_
             #print(ep_r)

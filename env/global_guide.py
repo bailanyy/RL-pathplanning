@@ -50,21 +50,21 @@ class Node(object):
             rightNode = Node(x,y+1,self.g+10,(abs(x-endx)+abs(y+1-endy))*10,self)
             result.append(rightNode)
     #西北  14
-        if(x!=0 and y!=0 and mapdata[x-1][y-1]!=1 ):
-            wnNode = Node(x-1,y-1,self.g+14,(abs(x-1-endx)+abs(y-1-endy))*10,self)
-            result.append(wnNode)
-    #东北
-        if(x!=0 and y!=len(mapdata[0])-1 and mapdata[x-1][y+1]!=1 ):
-            enNode = Node(x-1,y+1,self.g+14,(abs(x-1-endx)+abs(y+1-endy))*10,self)
-            result.append(enNode)
-    #西南
-        if(x!=len(mapdata)-1 and y!=0 and mapdata[x+1][y-1]!=1):
-            wsNode = Node(x+1,y-1,self.g+14,(abs(x+1-endx)+abs(y-1-endy))*10,self)
-            result.append(wsNode)
-    #东南
-        if(x!=len(mapdata)-1 and y!=len(mapdata[0])-1 and mapdata[x+1][y+1]!=1 ):
-            esNode = Node(x+1,y+1,self.g+14,(abs(x+1-endx)+abs(y+1-endy))*10,self)
-            result.append(esNode)
+    #     if(x!=0 and y!=0 and mapdata[x-1][y-1]!=1 ):
+    #         wnNode = Node(x-1,y-1,self.g+14,(abs(x-1-endx)+abs(y-1-endy))*10,self)
+    #         result.append(wnNode)
+    # #东北
+    #     if(x!=0 and y!=len(mapdata[0])-1 and mapdata[x-1][y+1]!=1 ):
+    #         enNode = Node(x-1,y+1,self.g+14,(abs(x-1-endx)+abs(y+1-endy))*10,self)
+    #         result.append(enNode)
+    # #西南
+    #     if(x!=len(mapdata)-1 and y!=0 and mapdata[x+1][y-1]!=1):
+    #         wsNode = Node(x+1,y-1,self.g+14,(abs(x+1-endx)+abs(y-1-endy))*10,self)
+    #         result.append(wsNode)
+    # #东南
+    #     if(x!=len(mapdata)-1 and y!=len(mapdata[0])-1 and mapdata[x+1][y+1]!=1 ):
+    #         esNode = Node(x+1,y+1,self.g+14,(abs(x+1-endx)+abs(y+1-endy))*10,self)
+    #         result.append(esNode)
         return result
     def hasNode(self,worklist):
         for i in worklist:
