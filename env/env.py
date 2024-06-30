@@ -18,10 +18,11 @@ class Env:
     def generate_map(self):
         rand_obstacle = np.random.randint(0,40,[2,self.obstacle_num])
         for i in range(self.obstacle_num):
-            self.grid_map[rand_obstacle[0][i]][rand_obstacle[1][i]] = 1
+            self.grid_map[rand_obstacle[0][i].astype('int64')][rand_obstacle[1][i].astype('int64')] = 1
     def generate_global_guidence(self,guidex,guidey):
+        self.global_guide_map = np.zeros((self.W,self.H))
         for i in range(len(guidex)):
-            self.global_guide_map[guidex[i]][guidey[i]] = 1
+            self.global_guide_map[guidex[i].astype('int64')][guidey[i].astype('int64')] = 1
     def add_agent(self,agent):
         for i in range(self.agent_num):
             self.agent_list.append(agent)
@@ -122,7 +123,8 @@ class Agent:
         self.out_bounded_flag = False
         self.reached = False 
         self.global_count = 0
-
+        self.guidex = None
+        self.guidey = None
        
     def obversation(self,grid_map): # 越界表示为障碍物
         # map size is 40*40
@@ -135,7 +137,8 @@ class Agent:
                     self.vof_env[i][j] = 1
                 else:
                     if grid_map[start_i + i][start_j + j] == 1:
-                            self.vof_env[i][j] = 1
+                        self.vof_env[i][j] = 1
+                                
                     if grid_map[start_i + i][start_j + j] == -1:
                         self.vof_state[i][j] = 1
                     if grid_map[start_i + i][start_j + j] == 2:
@@ -147,6 +150,9 @@ class Agent:
             return True
         else:
             return False
+    def get_guide_arrary(self,guidex,guidey):
+        self.guidex = guidex
+        self.guidey = guidey
     def transVOF2tensor(self):
         env_tensor = torch.tensor(self.vof_env.astype('float32'))
         state_tensor = torch.tensor(self.vof_state.astype('float32'))
@@ -162,18 +168,23 @@ class Agent:
         goal_rew = 50
         if self.collision_flag == True or self.out_bounded_flag == True:
             r2 = -0.1
-            r3 =0
-          
+            r3 =0  
         else :
             r2 = 0
+            # 符合全局指导路线
             if guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] == 1:
                 r3 = 0.1
-                
-                
-                
-
-                reward = reward + 0.1 * guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] * self.global_count
-                self.global_count = 0
+                reward = reward + 0.1 * self.global_count
+                self.global_count = 1
+                skip = 0
+                # 删除前面一段的全局指导
+                for i in range (len(self.guidex)):
+                    if self.guidex[i] == self.position[0][0] and self.guidey[i] == self.position[0][1]:
+                        skip = i
+                        break
+                delte_range = np.arange(skip+1)
+                self.guidex = np.delete(self.guidex,delte_range)
+                self.guidey = np.delete(self.guidey,delte_range)
                 guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] = 0
             else:
                 self.global_count += 1   
@@ -181,8 +192,6 @@ class Agent:
                 reward = reward + goal_rew
                 print('success',reward)
                 self.reached = True
-            # if self.action == 0:
-            #     reward = reward - 0.5
 
       
         reward = reward + r1+  r2 

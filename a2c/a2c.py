@@ -16,7 +16,7 @@ class ReplayBuffer():
         # 创建一个先进先出的队列，最大长度为capacity，保证经验池的样本量不变
         self.buffer = collections.deque(maxlen=capacity)
     # 将数据以元组形式添加进经验池
-    def add(self, state, action, reward, next_state, ):
+    def add(self, state, action, reward, next_state):
         
         self.buffer.append((state, action, reward, next_state))
     # 随机采样batch_size行数据
@@ -24,12 +24,19 @@ class ReplayBuffer():
         transitions = random.sample(self.buffer, batch_size)  # list, len=32
         # *transitions代表取出列表中的值，即32项
         state, action, reward, next_state = zip(*transitions)
-        return np.array(state), action, reward, np.array(next_state)
+        return state, action, reward, next_state
     # 目前队列长度
     def size(self):
         return len(self.buffer)
 
-
+def init_weights(layer):
+    # 如果为卷积层，使用正态分布初始化
+    if type(layer) == nn.Conv2d:
+        nn.init.normal_(layer.weight, mean=0, std=0.5)
+    # 如果为全连接层，权重使用均匀分布初始化，偏置初始化为0.1
+    elif type(layer) == nn.Linear:
+        nn.init.uniform_(layer.weight, a=-0.1, b=0.1)
+        nn.init.constant_(layer.bias, 0.1)
 
 class Actor(nn.Module):
     '''
@@ -58,7 +65,7 @@ class Actor(nn.Module):
 
         self.l1 = nn.Linear(128,64)
         self.l2 = nn.Linear(64,5)
-
+        self.lstm = nn.LSTM(128, 128, 1, batch_first=True)
 
     def forward(self, x):
         o1 = self.conv1(x)
@@ -69,7 +76,7 @@ class Actor(nn.Module):
         f3 = F.relu(o3)
         f3 = torch.reshape(f3,(1,128))
 
-
+        #r = self.lstm(f3)
         #全连接层
         o4 = self.l1(f3)
         f4 = F.relu(o4)
@@ -137,6 +144,19 @@ class Actor_Critic:
         self.critic_optim = torch.optim.Adam(self.critic.parameters(), lr=self.lr_c)
         
         self.loss = nn.MSELoss().cuda()
+        # 深度集成参数
+        self.ensemble_list = []
+        self.optim_list = []
+        self.critic_loss = []
+        self.Ne = 5
+        # for i in range(self.Ne):
+        #     tmp_critic = Critic().cuda()
+        #     tmp_critic.apply(init_weights)
+        #     self.ensemble_list.append(tmp_critic)
+        # for i in range(self.Ne):
+        #     ensemble_optim = torch.optim.Adam(self.ensemble_list[i].parameters(), lr=self.lr_c)
+        #     self.optim_list.append(ensemble_optim)
+
 
     def get_action(self, input):
         input = input.cuda()
@@ -154,14 +174,6 @@ class Actor_Critic:
         s_ = s_.cuda()
         v = self.critic(s)
         v_ = self.critic(s_)
-        # states = torch.tensor(transition_dict['states'], dtype=torch.float)
-        # log = torch.tensor(transition_dict['log']).view(-1,1)
-        # rewards = torch.tensor(transition_dict['rewards'], dtype=torch.float).view(-1,1)
-        # next_states = torch.tensor(transition_dict['next_states'], dtype=torch.float)
-
-        # v = self.critic(states)
-        # v_ = self.critic(next_states)
-
 
         critic_loss = self.loss(self.gamma * v_ + rewards, v)
         self.critic_optim.zero_grad()
@@ -173,3 +185,39 @@ class Actor_Critic:
         self.actor_optim.zero_grad()
         loss_actor.backward()
         self.actor_optim.step()
+    def deep_ensemble_learn(self,log,s,s_,rewards):
+        v_total = 0
+        v_total_ = 0
+        critic_loss = 0
+        s = s.cuda()
+        s_ = s_.cuda()
+        for model in self.ensemble_list:
+            vi=model(s)
+            vi_=model(s_)
+            #self.v_1.append(vi_)
+            # TD误差
+            v_total = v_total + vi
+            v_total_ = v_total_ + vi_
+            self.critic_loss.append(self.loss(self.gamma*vi_+rewards,vi))
+            critic_loss  = critic_loss + self.loss(self.gamma*vi_+rewards,vi)
+        # for i in range(self.Ne):
+        #     self.sigma = self.sigma + pow(self.v_1[i] - self.miu,2)/self.Ne
+
+        
+        for i in range(self.Ne):
+            self.optim_list[i].zero_grad()
+
+        critic_loss.backward()
+
+        for i in range(self.Ne):
+            self.optim_list[i].step()
+        
+
+
+        td = self.gamma * v_total_/self.Ne + rewards - v_total / self.Ne         #计算TD误差
+        #td = critic_loss / self.Ne
+        loss_actor = -log * td.detach()
+        self.actor_optim.zero_grad()
+        loss_actor.backward()
+        self.actor_optim.step()
+
