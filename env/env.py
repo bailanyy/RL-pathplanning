@@ -1,3 +1,11 @@
+'''
+Author: yygod-sgdie 729853861@qq.com
+Date: 2024-06-24 15:01:53
+LastEditors: yygod-sgdie 729853861@qq.com
+LastEditTime: 2024-07-04 20:51:24
+FilePath: \dissertation_project\env\env.py
+Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+'''
 import numpy as np
 import torch
 import torchvision.transforms as transforms
@@ -11,6 +19,7 @@ class Env:
         self.agent_num = 1
         self.agent_list = []
         self.reward_list = []
+        self.explore_reward_list = []
         self.observe_list = []
         self.obstacle_num = 100
         self.eposide_end = False
@@ -31,11 +40,14 @@ class Env:
     def update(self):
         self.reward_list = []
         self.observe_list = []
+        self.explore_reward_list = []
         for i in range(self.agent_num):
             if self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] == 1:
                 self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = 1
             else:
                 self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = 0
+            
+            # 得到动作
             action = self.agent_list[i].action
 
             if action == 0:
@@ -56,20 +68,17 @@ class Env:
             
             if self.agent_list[i].position[0][0] < 0 or self.agent_list[i].position[0][0] > 39 or self.agent_list[i].position[0][1] <0 or self.agent_list[i].position[0][1]>39:
                 self.agent_list[i].out_bounded_flag  = True  # 越界
-                #self.reset()
                 self.reset_position(action,self.agent_list[i])
-                #self.agent_list[i].position = self.agent_list[i].last_position
                 self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = -1
             elif self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] == 1:
-                self.agent_list[i].collision_flag = True  # 标志碰撞信号 碰撞障碍物
-                #self.reset()
+                self.agent_list[i].collision_flag = True  # 标志碰撞信号 碰撞障
                 self.reset_position(action,self.agent_list[i])
-                #self.agent_list[i].position = self.agent_list[i].last_position
                 self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = -1
             else:
                 self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = -1
-            reward = self.agent_list[i].get_reward(self.global_guide_map)
+            reward,re = self.agent_list[i].get_reward(self.global_guide_map)
             self.reward_list.append(reward)  #在这个函数置到达标志位
+            self.explore_reward_list.append(re)
             # 不对，只对一个智能体进行判断，在多智能体时需要更改进行更复杂的判断
             if self.agent_list[i].reached == True:
                 self.done = True
@@ -77,7 +86,7 @@ class Env:
             self.agent_list[i].obversation(self.grid_map)
             ob = self.agent_list[i].transVOF2tensor()
             self.observe_list.append(ob)
-        return self.reward_list,self.observe_list,self.done
+        return self.reward_list,self.explore_reward_list,self.observe_list,self.done
     def reset(self):
         for i in range(self.agent_num):
             self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = 0
@@ -112,20 +121,62 @@ class Agent:
         self.vof_env = np.zeros((15,15))
         self.vof_state = np.zeros((15,15))
         self.vof_guidence = np.zeros((15,15))
+        self.explore_map = np.zeros((40,40))
         self.vof = [self.vof_env,self.vof_state,self.vof_guidence]
         self.action = -1
         self.goal = np.zeros((1,2))
         self.goal[0][0] = 39
         self.goal[0][1] = 39
-        self.dis = math.sqrt(39*39+39*39)
         self.collision_flag = False
-        self.count = 0
         self.out_bounded_flag = False
         self.reached = False 
         self.global_count = 0
         self.guidex = None
         self.guidey = None
-       
+    def get_explore_map(self,map):
+        self.explore_map = map
+    def get_all_state(self,grid_map):
+        next_state = []
+        for i in range(5):
+            env = np.zeros((15,15))
+            state = np.zeros((15,15))
+            guide = np.zeros((15,15))
+            if i == 0:
+                start_i = self.position[0][0].astype('int64') - 7
+                start_j = self.position[0][1].astype('int64') - 7
+            if i == 1:
+                start_i = self.position[0][0].astype('int64') - 7 - 1
+                start_j = self.position[0][1].astype('int64') - 7
+            if i == 2:
+                start_i = self.position[0][0].astype('int64') - 7
+                start_j = self.position[0][1].astype('int64') - 1 - 7
+            if i == 3:
+                start_i = self.position[0][0].astype('int64') - 7 + 1
+                start_j = self.position[0][1].astype('int64') - 7
+            if i == 4:
+                start_i = self.position[0][0].astype('int64') - 7
+                start_j = self.position[0][1].astype('int64') - 7 + 1
+            for i in range(15):
+                for j in range(15):
+                    if self.out_boundness(start_i + i,start_j + j) == True:
+                        env[i][j] = 1
+                    else:
+                        if grid_map[start_i + i][start_j + j] == 1:
+                            env[i][j] = 1
+                                    
+                        if grid_map[start_i + i][start_j + j] == -1:
+                            state[i][j] = 1
+                        if grid_map[start_i + i][start_j + j] == 2:
+                            guide[i][j] = 1
+            env_tensor = torch.tensor(env.astype('float32'))
+            state_tensor = torch.tensor(state.astype('float32'))
+            guidence_tensor = torch.tensor(guide.astype('float32'))
+            input_tensor = torch.stack((env_tensor, state_tensor,guidence_tensor), dim=0)
+            next_state.append(input_tensor)
+        return next_state
+            
+
+
     def obversation(self,grid_map): # 越界表示为障碍物
         # map size is 40*40
         start_i = self.position[0][0].astype('int64') - 7
@@ -164,13 +215,16 @@ class Agent:
         self.goal[0][1] = goal[0][1]
     def get_reward(self,guide):
         r1 = 0.01 * -1
+        r_e = 0
         reward = 0
         goal_rew = 50
         if self.collision_flag == True or self.out_bounded_flag == True:
             r2 = -0.1
+            r_e = -1
             r3 =0  
         else :
             r2 = 0
+            r_e = 0
             # 符合全局指导路线
             if guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] == 1:
                 r3 = 0.1
@@ -197,7 +251,26 @@ class Agent:
         reward = reward + r1+  r2 
         self.collision_flag = False
         self.out_bounded_flag = False
-        return reward
+        return reward,r_e
+    def get_four_direction(self,map):
+        # 1 2 3 4 
+        obstacale_vector = np.zeros((1,4))
+        startx = self.position[0][0].astype('int')
+        starty = self.position[0][1].astype('int')
+        # action 1
+        obstacale_vector[0][0] = self.judge(startx-1,starty,map)
+        obstacale_vector[0][1] = self.judge(startx,starty-1,map)
+        obstacale_vector[0][2] = self.judge(startx+1,starty,map)
+        obstacale_vector[0][3] = self.judge(startx,starty+1,map)
+        return obstacale_vector
+    def judge(self,startx,starty,map):
+        if self.out_boundness(startx,starty)==True or map[startx][starty] != 0:
+            return 1
+        else:
+            return 0
+            
+
+
 
 
 

@@ -2,7 +2,7 @@
 Author: yy.yy 729853861@qq.com
 Date: 2024-06-24 16:18:19
 LastEditors: yygod-sgdie 729853861@qq.com
-LastEditTime: 2024-06-30 14:31:40
+LastEditTime: 2024-07-04 21:05:13
 FilePath: \dqnc:\workspace\dissertation_project\env\test_env.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -14,10 +14,13 @@ import time
 import sys
 sys.path.append(r'C:\workspace\dissertation_project\a2c')
 from a2c import Actor_Critic
+from a2c import A2C_DE
+
 from a2c import ReplayBuffer
 import numpy as np
+import matplotlib.pyplot as plt
 env = Env()
-model = Actor_Critic()
+model = A2C_DE()
 agent = Agent()
 
 #env.generate_map()
@@ -40,6 +43,7 @@ resultx = np.loadtxt("guidex.txt")
 resulty = np.loadtxt('guidey.txt')
 print(env.global_guide_map)
 print(env.grid_map)
+cross_list = []
 import pygame
 
 def main():
@@ -52,7 +56,7 @@ def main():
     maze = env.grid_map
     
     success = 0
-    for episode in range(3000):
+    for episode in range(300):
         env.done = False
         env.agent_list[0].reached = False
         env.agent_list[0].global_count = 1
@@ -67,8 +71,9 @@ def main():
         
         s = env.agent_list[0].transVOF2tensor()
         ep_r = 0
+        kl_total = 0
         env.agent_list[0].get_guide_arrary(resultx,resulty)
-        
+        mode = 0 # explore 0 actor 1
         while True:
             maze = env.grid_map
             env.generate_global_guidence(env.agent_list[0].guidex,env.agent_list[0].guidey)
@@ -90,28 +95,47 @@ def main():
                             pygame.draw.rect(screen, AGENT_COLOR, pygame.Rect(j * 10, i * 10, 10, 10))
                         if maze[i][j] == 1: #black
                             pygame.draw.rect(screen, ROUTE_COLOR, pygame.Rect(j * 10, i * 10, 10, 10))
-                    
+            next = env.agent_list[0].get_all_state(env.grid_map)
+            model.get_next(next)
+            x = model.get_posterior_distribution()
+            obstacle = env.agent_list[0].get_four_direction(env.grid_map)
+            #print(obstacle)
             # take action 
-            env.agent_list[0].action,log_prob= model.get_action(s)
-
-            reward,state,done = env.update() # 更新下一步的地图,返回一个reward
+            #env.agent_list[0].action,log_prob,a= model.get_action(s)
+            if episode < 5:
+                env.agent_list[0].action,log_prob,a= model.get_explore_action(s)
+                mode = 0
+            else:
+                env.agent_list[0].action,log_prob,a= model.get_action(s)
+                mode = 1
+            #env.agent_list[0].action,log_prob,a= model.simple_get_explore_action(model.get_posterior_distribution(),obstacle)
+            reward,re,state,done = env.update() # 更新下一步的地图,返回一个reward
             rew = reward[0]
             s_ = state[0]
+            r = re[0]
             ep_r = ep_r + rew
-            if max_step > 256:
+            if max_step > 300:
                 done = True
             if done == True:
                 if env.agent_list[0].reached == True:
                     success = success + 1
-                    print(rew)
+                    #print(rew)
                 break
-            model.learn(log_prob,s,s_,rew)
             
+            #print(x,env.agent_list[0].action,obstacle)
+            #print(model.get_crossentryloss(a))
+            
+            #print(x)
+            kl = model.get_JS_divergence(x,a).cpu().float()
+            kl_total += kl
+            model.learn(log_prob,s,s_,rew,r,x,a,obstacle,mode)
+            #print(f"episode:{max_step} ep_r:{kl} action{env.agent_list[0].action}")
             max_step = max_step + 1
             s = s_
             #print(ep_r)
             pygame.display.update()
-        print(f"episode:{episode} ep_r:{ep_r} success:{success}")
-    print(success)
+        print(f"episode:{episode} ep_r:{ep_r} success:{success} kl:{kl_total}")
+    # plt.plot(cross_list)
+    # plt.show()
 if __name__ == '__main__':
     main()
