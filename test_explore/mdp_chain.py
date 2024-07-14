@@ -57,8 +57,8 @@ class Critic(nn.Module):
     def __init__(self):
         super(Critic, self).__init__()
 
-        self.l1 = nn.Linear(1,8)
-        self.l2 = nn.Linear(8,1)
+        self.l1 = nn.Linear(1,16)
+        self.l2 = nn.Linear(16,1)
     def forward(self, x):
         #x = torch.reshape(x,(1,1))
         # x = np.array([x])
@@ -100,9 +100,9 @@ class Explorer(nn.Module):
 class EC():
     def __init__(self):
         self.gamma = 0.99
-        self.lr_a = 1e-4
-        self.lr_c = 1e-3
-        self.lr_e = 1e-4
+        self.lr_a = 1e-2
+        self.lr_c = 1e-2
+        self.lr_e = 1e-2
         self.Ne = 5
 
         self.action_dim = 5       #获取描述行动的数据维度
@@ -128,7 +128,7 @@ class EC():
     def get_next(self,input):
         self.all_next = input
 
-    def get_posterior_distribution(self):
+    def get_prior_distribution(self):
         mean = np.zeros((1,3))
         sigma = np.zeros((1,3))
         sigma_norm = np.zeros((1,3))
@@ -144,12 +144,15 @@ class EC():
                 v_value[i][j] = v
                 v_total += v
                 j += 1
+                #print(i,j,v)
             v_mean = v_total / self.Ne
+          
             mean[0][i] = v_mean
-        #print(v_value)
-        sigma_total = 0
+
+        
         for i in range(3):
             v_sigma = 0
+            sigma_total = 0
             for j in range(self.Ne):
 
                 v = v_value[i][j]
@@ -162,11 +165,14 @@ class EC():
         for i in range(3):
             sigma_norm[0][i] = sigma[0][i] / total
         sigma_norm = torch.Tensor(sigma_norm)
-        mean = torch.Tensor(mean)
-        
         distibution = sigma_norm
      
         return distibution
+    
+
+
+
+
     def get_explore_action(self,input):
         input = torch.Tensor([input])
         input = input.cuda()
@@ -191,29 +197,24 @@ class EC():
         a = distribution
         return action,log,a
 
-    def learn(self,s,s_,rewards,distibution,action_prob):#)
+    def learn(self,s,s_,rewards,distibution,posterior_distribution,action_prob):#)
         s = torch.Tensor([s])
         s_ = torch.Tensor([s_])
         #使用Critic网络估计状态值
         s = s.cuda()
         s_ = s_.cuda()
-      
-    
-        # v = self.critic(s)
-        # v_ = self.critic(s_)
         v_total = 0
         v_total_ = 0
         critic_loss = 0
         for model in self.ensemble_list:
             vi=model(s)
-            vi_=model(s_)
-    
+            vi_=model(s_)   
             # TD误差
             v_total = v_total + vi
             v_total_ = v_total_ + vi_
             self.critic_loss.append(self.loss(self.gamma*vi_+rewards,vi))
             critic_loss  = critic_loss + self.loss(self.gamma*vi_+rewards,vi)
-        
+        #critic_loss = critic_loss / self.Ne
         for i in range(self.Ne):
             self.optim_list[i].zero_grad()
 
@@ -222,7 +223,10 @@ class EC():
         for i in range(self.Ne):
             self.optim_list[i].step()
         distibution = distibution.cuda()
+        posterior_distribution = posterior_distribution.cuda()
         loss_explore = self.crossEntropyLoss(distibution,action_prob)
+        #loss_explore = 1 / loss_explore
+        print(loss_explore)
         self.explorer_optim.zero_grad()
         loss_explore.backward()
         self.explorer_optim.step()

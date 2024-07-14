@@ -407,10 +407,10 @@ class A2C_DE:
             tmp_critic = Critic().cuda()
             tmp_critic.apply(init_weights)
             self.ensemble_list.append(tmp_critic)
-        for i in range(self.Ne):
-            ensemble_optim = torch.optim.Adam(self.ensemble_list[i].parameters(), lr=self.lr_c)
-            self.optim_list.append(ensemble_optim)
-        
+        # for i in range(self.Ne):
+        #     ensemble_optim = torch.optim.Adam(self.ensemble_list[i].parameters(), lr=self.lr_c)
+        #     self.optim_list.append(ensemble_optim)
+        self.optimizer = torch.optim.Adam([{"params": model.parameters()} for model in self.ensemble_list], lr=self.lr_c)
         
         self.loss = nn.MSELoss().cuda()
         self.crossEntropyLoss = nn.CrossEntropyLoss()
@@ -439,17 +439,19 @@ class A2C_DE:
                 v_total += v
                 j += 1
             v_mean = v_total / self.Ne
+            #print(i,v_mean)
             mean[0][i] = v_mean
         #print(v_value)
-        sigma_total = 0
+       
         for i in range(5):
             v_sigma = 0
+            sigma_total = 0
             for j in range(self.Ne):
 
                 v = v_value[i][j]
                 
                 sigma_total = sigma_total+ (v - mean[0][i]) * (v - mean[0][i])
-                #print(v,mean[0][i])
+                
             v_sigma = sigma_total / self.Ne
             sigma[0][i] = v_sigma
         total = sigma[0][1] + sigma[0][2] + sigma[0][3] + sigma[0][0] + sigma[0][4] 
@@ -457,7 +459,7 @@ class A2C_DE:
             sigma_norm[0][i] = sigma[0][i] / total
         sigma_norm = torch.Tensor(sigma_norm)
         mean = torch.Tensor(mean)
-        
+        #print(sigma)
         distibution = sigma_norm
      
         return distibution
@@ -515,13 +517,10 @@ class A2C_DE:
         #使用Critic网络估计状态值
         s = s.cuda()
         s_ = s_.cuda()
-
-    
-        # v = self.critic(s)
-        # v_ = self.critic(s_)
         v_total = 0
         v_total_ = 0
         critic_loss = 0
+        self.critic_loss = []
         for model in self.ensemble_list:
             vi=model(s)
             vi_=model(s_)
@@ -531,29 +530,23 @@ class A2C_DE:
             v_total_ = v_total_ + vi_
             self.critic_loss.append(self.loss(self.gamma*vi_+rewards,vi))
             critic_loss  = critic_loss + self.loss(self.gamma*vi_+rewards,vi)
-        
+        self.optimizer.zero_grad()
         for i in range(self.Ne):
-            self.optim_list[i].zero_grad()
-
-        critic_loss.backward()
-
-        for i in range(self.Ne):
-            self.optim_list[i].step()
-        
+            critic_loss = self.critic_loss[i]
+            critic_loss.backward()
+        self.optimizer.step()
         if mode == 1:
             td = self.gamma * v_total_/self.Ne + rewards - v_total / self.Ne          #计算TD误差
-            w = 5e-3
-            loss_explore = (self.get_JS_divergence(distibution,action_prob))
             loss_actor = -log * td.detach() 
             self.actor_optim.zero_grad()
             loss_actor.backward()
             self.actor_optim.step()
         if mode == 0:
+            distibution[0][0] = 0
             for i in range (4):
                 if obstacle[0][i] == 1:
                     distibution[0][i+1] = 0
             distibution = distibution.cuda()
-            print(distibution,action_prob)
             loss_explore = self.crossEntropyLoss(distibution,action_prob)
             self.explorer_optim.zero_grad()
             loss_explore.backward()

@@ -2,7 +2,7 @@
 Author: yygod-sgdie 729853861@qq.com
 Date: 2024-06-24 15:01:53
 LastEditors: yygod-sgdie 729853861@qq.com
-LastEditTime: 2024-07-04 20:51:24
+LastEditTime: 2024-07-14 21:36:19
 FilePath: \dissertation_project\env\env.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -14,13 +14,19 @@ class Env:
     def __init__(self):
         self.W = 40
         self.H = 40
+        
         self.grid_map = np.zeros((self.W,self.H))
         self.global_guide_map = np.zeros((self.W,self.H))
-        self.agent_num = 1
+        self.global_guide_list = []
+        self.global_x_list = []
+        self.global_y_list = []
+        self.agent_num = 2
+        self.done_count = self.agent_num
         self.agent_list = []
         self.reward_list = []
         self.explore_reward_list = []
         self.observe_list = []
+        self.state_list = []
         self.obstacle_num = 100
         self.eposide_end = False
         self.done = False
@@ -32,11 +38,27 @@ class Env:
         self.global_guide_map = np.zeros((self.W,self.H))
         for i in range(len(guidex)):
             self.global_guide_map[guidex[i].astype('int64')][guidey[i].astype('int64')] = 1
+    def generate_multi_global_guidence(self):
+        self.global_guide_map = np.zeros((self.W,self.H))
+        self.global_guide_list = []
+        
+        for i in range(self.agent_num):
+            gmap = np.zeros((self.W,self.H))
+            for j in range(len(self.agent_list[i].guidex)):
+                
+                gmap[self.agent_list[i].guidex[j].astype('int64')][self.agent_list[i].guidey[j].astype('int64')] = 1
+                self.global_guide_map[self.agent_list[i].guidex[j].astype('int64')][self.agent_list[i].guidey[j].astype('int64')] = 1
+            self.global_guide_list.append(gmap)
+
     def add_agent(self,agent):
         for i in range(self.agent_num):
             self.agent_list.append(agent)
-            
+        
             self.grid_map[agent.position[0][0].astype('int64')][agent.position[0][1].astype('int64')] = -1
+    def get_multi_ob(self):
+        for i in range(self.agent_num):
+            s = self.agent_list[i].transVOF2tensor()
+            self.state_list.append(s)
     def update(self):
         self.reward_list = []
         self.observe_list = []
@@ -49,6 +71,9 @@ class Env:
             
             # 得到动作
             action = self.agent_list[i].action
+            if self.agent_list[i].reached == True:
+                #self.done = True
+                self.agent_list[i].action = 0
 
             if action == 0:
                 self.agent_list[i].position = self.agent_list[i].position
@@ -76,23 +101,28 @@ class Env:
                 self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = -1
             else:
                 self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = -1
-            reward,re = self.agent_list[i].get_reward(self.global_guide_map)
+            reward,re = self.agent_list[i].get_reward(self.global_guide_list[i])  # 错了
             self.reward_list.append(reward)  #在这个函数置到达标志位
             self.explore_reward_list.append(re)
             # 不对，只对一个智能体进行判断，在多智能体时需要更改进行更复杂的判断
-            if self.agent_list[i].reached == True:
-                self.done = True
-
+            
             self.agent_list[i].obversation(self.grid_map)
             ob = self.agent_list[i].transVOF2tensor()
             self.observe_list.append(ob)
+        if self.agent_list[0].reached == True and self.agent_list[1].reached == True:
+            self.done = True
         return self.reward_list,self.explore_reward_list,self.observe_list,self.done
     def reset(self):
         for i in range(self.agent_num):
             self.grid_map[self.agent_list[i].position[0][0].astype('int64')][self.agent_list[i].position[0][1].astype('int64')] = 0
-            self.agent_list[i].position = self.agent_list[i].init_position
-            self.agent_list[i].init_position = np.zeros((1,2))
-            
+            if i == 0:
+                self.agent_list[0].position = np.zeros((1,2))
+            if i == 1:
+                p = np.zeros((1,2))
+                p[0][0] = 0
+                p[0][1] = 39
+                self.agent_list[1].position = p
+    
     def reset_position(self,action,agent):
         if action == 0:
             agent.position = agent.position
@@ -124,6 +154,8 @@ class Agent:
         self.explore_map = np.zeros((40,40))
         self.vof = [self.vof_env,self.vof_state,self.vof_guidence]
         self.action = -1
+        self.log_prob = None
+        self.action_prob = None
         self.goal = np.zeros((1,2))
         self.goal[0][0] = 39
         self.goal[0][1] = 39
@@ -191,6 +223,7 @@ class Agent:
                         self.vof_env[i][j] = 1
                                 
                     if grid_map[start_i + i][start_j + j] == -1:
+                        self.vof_state[7][7] = 0
                         self.vof_state[i][j] = 1
                     if grid_map[start_i + i][start_j + j] == 2:
                         self.vof_guidence[i][j] = 1
@@ -227,24 +260,31 @@ class Agent:
             r_e = 0
             # 符合全局指导路线
             if guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] == 1:
+                
+                
                 r3 = 0.1
-                reward = reward + 0.1 * self.global_count
+                reward = reward   + 0.1 * self.global_count
+                
                 self.global_count = 1
                 skip = 0
                 # 删除前面一段的全局指导
                 for i in range (len(self.guidex)):
                     if self.guidex[i] == self.position[0][0] and self.guidey[i] == self.position[0][1]:
                         skip = i
+                        
+                        #print(skip,self.guidex[i],self.position[0][0])
                         break
                 delte_range = np.arange(skip+1)
-                self.guidex = np.delete(self.guidex,delte_range)
-                self.guidey = np.delete(self.guidey,delte_range)
+                #print(delte_range)
+                if len(self.guidex) > 1:
+                    self.guidex = np.delete(self.guidex,delte_range)
+                    self.guidey = np.delete(self.guidey,delte_range)
                 guide[self.position[0][0].astype('int64')][self.position[0][1].astype('int64')] = 0
             else:
                 self.global_count += 1   
             if self.position[0][0] == self.goal[0][0] and self.position[0][1] == self.goal[0][1]:
                 reward = reward + goal_rew
-                print('success',reward)
+                
                 self.reached = True
 
       
